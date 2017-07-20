@@ -1,29 +1,29 @@
-import youtube_dl, os, threading, logging, json
-with open('raspberrycast.conf') as f:    
+import youtube_dl, os, threading, logging, json, urlparse, urllib
+with open('raspberrycast.conf') as f:
     config = json.load(f)
 logger = logging.getLogger("RaspberryCast")
 volume = 0
 
 def launchvideo(url, sub=False):
 	setState("2")
-	
+
 	os.system("echo -n q > /tmp/cmd &") #Kill previous instance of OMX
 
 	if config["new_log"]:
 		os.system("sudo fbi -T 1 -a --noverbose images/processing.jpg")
 
-	logger.info('Extracting source video URL...')	
+	logger.info('Extracting source video URL...')
 	out = return_full_url(url, sub)
 
 	logger.debug("Full video URL fetched.")
-	
+
 	thread = threading.Thread(target=playWithOMX, args=(out, sub,))
 	thread.start()
-	
+
 	os.system("echo . > /tmp/cmd &") #Start signal for OMXplayer
 
 def queuevideo(url, onlyqueue=False):
-	logger.info('Extracting source video URL, before adding to queue...')	
+	logger.info('Extracting source video URL, before adding to queue...')
 
 	out = return_full_url(url, False)
 
@@ -42,7 +42,7 @@ def queuevideo(url, onlyqueue=False):
 def return_full_url(url, sub=False):
 	logger.debug("Parsing source url for "+url+" with subs :"+str(sub))
 
-	if (url[-4:] in (".avi", ".mkv", ".mp4", ".mp3")) or (sub) or (".googlevideo.com/" in url):	
+	if (url[-4:] in (".avi", ".mkv", ".mp4", ".mp3")) or (sub) or (".googlevideo.com/" in url):
 		logger.debug('Direct video URL, no need to use youtube-dl.')
 		return url
 
@@ -98,10 +98,10 @@ def playlist(url, cast_now):
 
 	thread = threading.Thread(target=playlistToQueue, args=(url,))
 	thread.start()
-	
+
 def playlistToQueue(url):
 	logger.info("Adding every videos from playlist to queue.")
-	ydl = youtube_dl.YoutubeDL({'logger': logger, 'extract_flat': 'in_playlist',  'ignoreerrors': True}) 
+	ydl = youtube_dl.YoutubeDL({'logger': logger, 'extract_flat': 'in_playlist',  'ignoreerrors': True})
 	with ydl: #Downloading youtub-dl infos
 		result = ydl.extract_info(url, download=False)
 		for i in result['entries']:
@@ -119,7 +119,7 @@ def playWithOMX(url, sub):
 		pass
 	else :
 		os.system("omxplayer -b -r -o both '" + url + "' --vol " + str(volume) + " < /tmp/cmd")
-	
+
 	if getState() != "2": # In case we are again in the launchvideo function
 		setState("0")
 		with open('video.queue', 'r') as f: #Check if there is videos in queue
@@ -152,3 +152,21 @@ def setVolume(vol):
 	if vol == "less":
 		volume -= 300
 
+def fix_url(url, ip):
+	url = fix_url_host(url, ip)
+	return fix_url_spaces(url)
+
+
+def fix_url_host(url, ip):
+	if ('localhost' in url) or ('127.0.0.1' in url):
+		logger.debug('URL containing localhost adress . Replacing with remote ip :'+ip)
+		url = url.replace('localhost', ip).replace('127.0.0.1', ip)
+	return fix_url_spaces(url)
+
+def fix_url_spaces(s, charset='utf-8'):
+	if isinstance(s, unicode):
+		s = s.encode(charset, 'ignore')
+	scheme, netloc, path, qs, anchor = urlparse.urlsplit(s)
+	path = urllib.quote(path, '/%')
+	qs = urllib.quote_plus(qs, ':&=')
+	return urlparse.urlunsplit((scheme, netloc, path, qs, anchor))

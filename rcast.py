@@ -11,6 +11,17 @@ signal.signal(signal.SIGINT, signal_handler)
 ip = 'raspberrypi.local:2020'
 
 tocast = sys.argv[1]
+subtitle_file_name, sub_tocast = [None, None]
+
+try:
+    sub_tocast = sys.argv[2]
+    if not os.path.isfile(sub_tocast):
+        print "Sub not found!"
+        sys.exit(0)
+    else:
+        subtitle_file_name = os.path.split(sub_tocast)[1]
+except Exception:
+    pass
 
 print "-----------------------------"
 print "Casting "+tocast
@@ -48,7 +59,11 @@ encoded_string = urllib.quote_plus("http://localhost:8080/"+filename)
 
 full_url = "http://"+ip+"/stream?url="+encoded_string
 
-#print "Calling "+full_url
+if subtitle_file_name != None:
+    full_url += "&subtitles=" + urllib.quote_plus(
+        "http://localhost:8080/" + subtitle_file_name)
+
+print "Calling "+full_url
 
 urllib2.urlopen(full_url).read()
 
